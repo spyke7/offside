@@ -47,3 +47,36 @@ class StatsBombDataLoader:
         
         with open(filepath, 'r', encoding='utf-8') as f:
             return json.load(f)
+
+    def load_data(self, match_id: int = DEFAULT_MATCH_ID, dataset_type: str = "events"):
+        """
+        Loads match data from local files.
+        Uses the pre-downloaded match.json and lineup.json files.
+        
+        For World Cup 2022 Final: Argentina vs France
+        """
+        # Try World Cup 2022 final first
+        match_path = os.path.join(str(self.data_dir), "matches", "worldcup_2022_final.json")
+        lineup_path = os.path.join(str(self.data_dir), "matches", "worldcup_2022_final_lineup.json")
+        
+        # Fallback to old match.json if WC final not found
+        if not os.path.exists(match_path):
+            print("[!] World Cup 2022 final not found, using fallback match data...")
+            match_path = os.path.join(str(self.data_dir), "matches", "match.json")
+            lineup_path = os.path.join(str(self.data_dir), "matches", "lineup.json")
+        
+        if not os.path.exists(match_path):
+            raise FileNotFoundError(f"Match file not found at: {match_path}")
+
+        print(f"Loading match data from {match_path}...")
+        try:
+            dataset = statsbomb.load(
+                event_data=match_path,
+                lineup_data=lineup_path if os.path.exists(lineup_path) else None,
+                coordinates="statsbomb",
+            )
+            print("Data loaded successfully.")
+            return dataset
+        except Exception as e:
+            print(f"Error loading data: {e}")
+            raise
