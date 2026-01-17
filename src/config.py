@@ -1,4 +1,3 @@
-<<<<<<< HEAD
 """
 Configuration file for the football match simulation.
 Contains all constants, settings, and file paths.
@@ -59,7 +58,6 @@ DEFAULT_MATCH_ID = 3788741    # Example match
 
 # STATS TRACKING
 STATS_UPDATE_INTERVAL = 1.0 
-=======
 import os
 
 # Screen Dimensions
@@ -100,4 +98,3 @@ STATSBOMB_REPO = "https://raw.githubusercontent.com/statsbomb/open-data/master/d
 DEFAULT_COMPETITION_ID = 43 # World Cup
 DEFAULT_SEASON_ID = 3 # 2018
 DEFAULT_MATCH_ID = 8658 # Belgium vs Japan
->>>>>>> d834c2e629ea50d6b0367ac0e778002e821f8ae1
