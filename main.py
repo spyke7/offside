@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 """
 Main Entry Point for Football Match Simulation
 
@@ -122,3 +123,10 @@ def main():
 
 if __name__ == "__main__":
     main()
+=======
+from src.game_engine import GameEngine
+
+if __name__ == "__main__":
+    game = GameEngine()
+    game.run()
+>>>>>>> d834c2e629ea50d6b0367ac0e778002e821f8ae1

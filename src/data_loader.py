@@ -46,6 +46,7 @@ class StatsBombDataLoader:
             self.download_file(url, filepath)
         
         with open(filepath, 'r', encoding='utf-8') as f:
+<<<<<<< HEAD
             return json.load(f)
 
     def get_matches(self, competition_id: int, season_id: int) -> List[Dict]:
@@ -210,3 +211,6 @@ if __name__ == "__main__":
     team_a, team_b = get_team_info(dataset)
     print(f"\n{team_a['name']}: {len(team_a['players'])} players")
     print(f"{team_b['name']}: {len(team_b['players'])} players")
+=======
+            return json.load(f)
+>>>>>>> d834c2e629ea50d6b0367ac0e778002e821f8ae1
