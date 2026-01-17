@@ -1,0 +1,16 @@
+# Core
+kloppy
+mplsoccer
+pandas
+numpy
+
+# Visualization
+pygame
+matplotlib
+
+# AI / Networking
+requests
+aiohttp
+
+# Utilities
+python-dateutil
