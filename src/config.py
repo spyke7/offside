@@ -3,6 +3,8 @@ import os
 # Screen Dimensions
 SCREEN_WIDTH = 1200
 SCREEN_HEIGHT = 800
+PANEL_WIDTH = 300
+PITCH_WIDTH = SCREEN_WIDTH - PANEL_WIDTH
 FPS = 60
 
 # Colors
@@ -12,6 +14,9 @@ COLOR_GREEN = (34, 139, 34)  # Pitch Green
 COLOR_RED = (255, 0, 0)
 COLOR_BLUE = (0, 0, 255)
 COLOR_YELLOW = (255, 255, 0)
+COLOR_PANEL_BG = (50, 50, 50)
+COLOR_TEXT_HEADER = (255, 255, 255)
+COLOR_TEXT_BODY = (200, 200, 200)
 
 # Paths
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

@@ -1,42 +1,49 @@
-from kloppy import statsbomb
-import pandas as pd
 import os
-from src.config import SAMPLE_MATCH_PATH
+import json
+import requests
+from pathlib import Path
+from typing import Dict, List, Tuple, Optional
 
-class DataLoader:
-    def __init__(self, match_path=SAMPLE_MATCH_PATH):
-        self.match_path = match_path
-        self.dataset = None
+from kloppy import statsbomb
+from kloppy.domain import Dataset, Event, Team, Player
 
-    def load_data(self):
-        """Loads StatsBomb data using kloppy."""
-        if not os.path.exists(self.match_path):
-            raise FileNotFoundError(f"Match file not found at: {self.match_path}")
+from src.config import (
+    DATA_DIR, 
+    STATSBOMB_REPO,
+    DEFAULT_COMPETITION_ID,
+    DEFAULT_SEASON_ID,
+    DEFAULT_MATCH_ID
+)
 
-        print(f"Loading match data from {self.match_path}...")
-        self.dataset = statsbomb.load(
-            event_data=self.match_path,
-            coordinates="statsbomb",  # Keep native coordinates for now
-            data_version="1.1" # Explicitly set data version if needed, or let kloppy decide
-        )
-        print("Data loaded successfully.")
-        return self.dataset
 
-    def get_events(self):
-        """Returns events as a pandas DataFrame (if needed) or list."""
-        if not self.dataset:
-            self.load_data()
+class StatsBombDataLoader:
+    
+    def __init__(self):
+        self.data_dir = Path(DATA_DIR)
+        self.data_dir.mkdir(parents=True, exist_ok=True)
+
+    def download_file(self, url: str, filepath: Path) -> bool:
+        try:
+            response = requests.get(url, timeout=30)
+            response.raise_for_status()
+            
+            filepath.parent.mkdir(parents=True, exist_ok=True)
+            with open(filepath, 'wb') as f:
+                f.write(response.content)
+            
+            print(f"Downloaded: {filepath.name}")
+            return True
+            
+        except requests.RequestException as e:
+            print(f"Failed to download {url}: {e}")
+            return False
+
+    def get_competitions(self) -> List[Dict]:
+        url = f"{STATSBOMB_REPO}competitions.json"
+        filepath = self.data_dir / "competitions.json"
         
-        # Kloppy datasets facilitate easy conversion to pandas
-        # Accessing all events
-        return self.dataset.events
-
-if __name__ == "__main__":
-    loader = DataLoader()
-    try:
-        data = loader.load_data()
-        print(f"Loaded {len(data.events)} events.")
-        print(f"Home Team: {data.metadata.teams[0].name}")
-        print(f"Away Team: {data.metadata.teams[1].name}")
-    except Exception as e:
-        print(f"Error loading data: {e}")
+        if not filepath.exists():
+            self.download_file(url, filepath)
+        
+        with open(filepath, 'r', encoding='utf-8') as f:
+            return json.load(f)
