@@ -1,139 +1,16 @@
 """
-Main entry point for OffSide Football Analytics Engine.
-"""
-
-import pygame
-import sys
-
-from src.data_loader import StatsBombDataLoader
-"""
-Main Entry Point for Football Match Simulation
-
-This file initializes the game and runs the main loop.
-
-Usage:
-    python main.py [match_id]
-    
-    If no match_id provided, uses default from config.py
+Main Entry Point - Complete Application
+Handles menu navigation and match simulation
 """
 
 import sys
 import pygame
-from src.data_loader import StatsBombDataLoader
-from src.config import (
-    SCREEN_WIDTH,
-    SCREEN_HEIGHT,
-    FPS,
-    DEFAULT_MATCH_ID,
-    BACKGROUND_DARK
-)
 
-
-def main():
-    pygame.init()
-    
-    screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
-    pygame.display.set_caption("Football Match Simulation - StatsBomb Data")
-    
-    clock = pygame.time.Clock()
-    
-    print("\n" + "="*60)
-    print("FOOTBALL MATCH SIMULATION")
-    print("="*60)
-    
-    match_id = DEFAULT_MATCH_ID
-    if len(sys.argv) > 1:
-        try:
-            match_id = int(sys.argv[1])
-        except ValueError:
-            print(f"Invalid match_id. Using default: {DEFAULT_MATCH_ID}")
-    
-    loader = StatsBombDataLoader()
-    
-    try:
-        dataset = loader.load_match_data(match_id)
-    except Exception as e:
-        print(f"\n[-] Error loading match data: {e}")
-        print("Please check your internet connection and match ID.")
-        pygame.quit()
-        sys.exit(1)
-    
-    team_a = dataset.metadata.teams[0]
-    team_b = dataset.metadata.teams[1]
-    
-    font = pygame.font.Font(None, 36)
-    small_font = pygame.font.Font(None, 24)
-    
-    # Get final score from last period
-    final_score_a = dataset.metadata.score.home if dataset.metadata.score else 0
-    final_score_b = dataset.metadata.score.away if dataset.metadata.score else 0
-    
-    running = True
-    
-    print("\nSimulation window opened")
-    print("Press ESC or close window to quit\n")
-    
-    while running:
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                running = False
-            
-            elif event.type == pygame.KEYDOWN:
-                if event.key == pygame.K_ESCAPE:
-                    running = False
-        
-        screen.fill(BACKGROUND_DARK)
-        
-        title_text = font.render("Match Data Loaded Successfully!", True, (255, 255, 255))
-        screen.blit(title_text, (SCREEN_WIDTH // 2 - title_text.get_width() // 2, 100))
-        
-        # Team names and score
-        match_text = f"{team_a.name} {final_score_a} - {final_score_b} {team_b.name}"
-        match_surface = font.render(match_text, True, (255, 255, 255))
-        screen.blit(match_surface, (SCREEN_WIDTH // 2 - match_surface.get_width() // 2, 200))
-        
-        # Event count
-        events_text = f"Total Events: {len(dataset.events)}"
-        events_surface = small_font.render(events_text, True, (180, 180, 180))
-        screen.blit(events_surface, (SCREEN_WIDTH // 2 - events_surface.get_width() // 2, 300))
-        
-        # Instructions
-        instructions = [
-            "Game engine and renderer coming next!",
-            "",
-            "Data loaded:",
-            f"  • {len(team_a.players)} players for {team_a.name}",
-            f"  • {len(team_b.players)} players for {team_b.name}",
-            f"  • {len(dataset.events)} match events",
-            "",
-            "Press ESC to quit"
-        ]
-        
-        y_offset = 400
-        for line in instructions:
-            text_surface = small_font.render(line, True, (200, 200, 200))
-            screen.blit(text_surface, (SCREEN_WIDTH // 2 - text_surface.get_width() // 2, y_offset))
-            y_offset += 30
-        
-        # Update display
-        pygame.display.flip()
-        
-        # Control frame rate
-        clock.tick(FPS)
-    
-    # ========================================================================
-    # CLEANUP
-    # ========================================================================
-    pygame.quit()
-    print("Simulation closed. Goodbye!")
-
-
-if __name__ == "__main__":
-    main()
+from src.data_loader import StatsBombDataLoader, get_player_info
 from src.game_engine import GameEngine
-from src.renderer import Renderer
+from src.renderer import Renderer, UIState
 from src.stats_tracker import StatsTracker
-from src.config import SCREEN_WIDTH, SCREEN_HEIGHT, FPS
+from src.config import *
 
 
 def main():
@@ -142,131 +19,257 @@ def main():
     # Initialize Pygame
     pygame.init()
     screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
-    pygame.display.set_caption("OffSide - Football Analytics Engine")
+    pygame.display.set_caption("Football Match Simulator")
     clock = pygame.time.Clock()
     
     print("=" * 60)
-    print("OffSide - Football Analytics Engine")
+    print("FOOTBALL MATCH SIMULATOR")
     print("=" * 60)
     
-    # Load match data
-    print("\n[*] Loading match data...")
-    try:
-        data_loader = StatsBombDataLoader()
-        dataset = data_loader.load_data()
-        print(f"[+] Loaded {len(dataset.events)} events")
-        print(f"[+] Teams: {dataset.metadata.teams[0].name} vs {dataset.metadata.teams[1].name}")
-    except Exception as e:
-        print(f"[-] Failed to load data: {e}")
-        pygame.quit()
-        sys.exit(1)
+    # Initialize data loader and renderer
+    data_loader = StatsBombDataLoader()
+    renderer = Renderer(screen)
     
-    # Initialize stats tracker
-    print("\n[*] Initializing stats tracker...")
-    stats_tracker = StatsTracker()
-    stats_tracker.process_events(dataset.events)
-    
-    # Initialize game engine
-    print("\n[*] Initializing game engine...")
-    try:
-        game_engine = GameEngine(dataset)
-    except Exception as e:
-        print(f"[-] Failed to initialize game engine: {e}")
-        pygame.quit()
-        sys.exit(1)
-    
-    # Initialize renderer
-    print("\n[*] Initializing renderer...")
-    try:
-        team_a_name = dataset.metadata.teams[0].name
-        team_b_name = dataset.metadata.teams[1].name
-        renderer = Renderer(screen, team_a_name, team_b_name)
-        
-        # Build player info for renderer
-        player_info = {}
-        for team in dataset.metadata.teams:
-            for player in team.players:
-                player_info[player.player_id] = {
-                    'name': player.name,
-                    'team': team.name,
-                    'jersey_number': player.jersey_no if hasattr(player, 'jersey_no') else '?',
-                    'stats': stats_tracker.get_player_stats(player.player_id)
-                }
-        
-        renderer.set_player_info(player_info)
-    except Exception as e:
-        print(f"[-] Failed to initialize renderer: {e}")
-        pygame.quit()
-        sys.exit(1)
-    
-    print("\n[+] Initialization complete!")
-    print("\n" + "=" * 60)
-    print("CONTROLS:")
-    print("  SPACE     - Play/Pause")
-    print("  <-/->     - Seek backward/forward")
-    print("  Click     - Select player")
-    print("  ESC       - Quit")
-    print("=" * 60 + "\n")
-    
-    # Game state
+    # State variables
+    game_engine = None
+    stats_tracker = None
     paused = True
+    current_matches = []
+    current_competition_id = None
+    current_season_id = None
+    last_selected_competition = None
+    last_selected_team_a = None
+    last_selected_team_b = None
+    all_teams = []
+    
     running = True
     
-    # Main game loop
+    print("\n✓ Application started")
+    print("Navigate using the menu to select a match\n")
+    
     while running:
-        dt = clock.tick(FPS) / 1000.0  # Delta time in seconds
+        dt = clock.tick(FPS) / 1000.0
         
-        # Handle events
+        # 1. Check for competition change
+        selected_comp = renderer.competition_dropdown.selected
+        if selected_comp and selected_comp != last_selected_competition and selected_comp in COMPETITIONS:
+            last_selected_competition = selected_comp
+            current_competition_id = COMPETITIONS[selected_comp]['id']
+            
+            # Reset dependent dropdowns
+            renderer.season_dropdown.selected_index = -1
+            renderer.season_dropdown.options = []
+            renderer.team_a_dropdown.selected_index = -1
+            renderer.team_a_dropdown.options = []
+            renderer.team_b_dropdown.selected_index = -1
+            renderer.team_b_dropdown.options = []
+            
+            # Populate seasons
+            seasons = list(COMPETITIONS[selected_comp]['seasons'].keys())
+            renderer.season_dropdown.options = sorted(seasons, reverse=True)
+            print(f"✓ Selected {selected_comp} (ID: {current_competition_id})")
+
+        # 2. Check for season change (triggers match loading)
+        selected_season = renderer.season_dropdown.selected
+        if selected_comp and selected_season and (selected_season != current_season_id or not current_matches):
+             # Map season string back to ID
+            season_id = COMPETITIONS[selected_comp]['seasons'][selected_season]
+            
+            if season_id != current_season_id:
+                current_season_id = season_id
+                
+                # Reset team selections
+                renderer.team_a_dropdown.selected_index = -1
+                renderer.team_b_dropdown.selected_index = -1
+                
+                # Load matches
+                renderer.is_loading = True
+                print(f"\n[LOADING] Fetching matches for {selected_comp} {selected_season}...")
+                current_matches = data_loader.get_matches_for_competition(current_competition_id, current_season_id)
+                renderer.is_loading = False
+                
+                if current_matches:
+                    print(f"✓ Found {len(current_matches)} matches")
+                    
+                    # Populate teams list (master list)
+                    teams = set()
+                    for match in current_matches:
+                        teams.add(match['home_team']['home_team_name'])
+                        teams.add(match['away_team']['away_team_name'])
+                    
+                    all_teams = sorted(list(teams))
+                    
+                    # Initial population (no selections yet)
+                    renderer.team_a_dropdown.options = all_teams[:]
+                    renderer.team_a_dropdown.scroll_offset = 0
+                    renderer.team_b_dropdown.options = all_teams[:]
+                    renderer.team_b_dropdown.scroll_offset = 0
+                else:
+                    print("✗ No matches found")
+                    all_teams = []
+                    renderer.team_a_dropdown.options = []
+                    renderer.team_b_dropdown.options = []
+
+        # 3. Check for team changes (Mutual Exclusion Logic)
+        selected_team_a = renderer.team_a_dropdown.selected
+        selected_team_b = renderer.team_b_dropdown.selected
+        
+        if (selected_team_a != last_selected_team_a or selected_team_b != last_selected_team_b):
+            # If selection changed, we need to re-filter options to ensure mutual exclusion
+            # Capture current selections as strings
+            current_a = selected_team_a
+            current_b = selected_team_b
+            
+            # Update last selected trackers
+            last_selected_team_a = current_a
+            last_selected_team_b = current_b
+            
+            # Filter options for A (exclude B's selection)
+            if current_b:
+                opts_a = [t for t in all_teams if t != current_b]
+            else:
+                opts_a = all_teams[:]
+                
+            renderer.team_a_dropdown.options = opts_a
+            renderer.team_a_dropdown.scroll_offset = 0
+            # Restore selection for A
+            if current_a in opts_a:
+                renderer.team_a_dropdown.selected_index = opts_a.index(current_a)
+            else:
+                renderer.team_a_dropdown.selected_index = -1
+            
+            # Filter options for B (exclude A's selection)
+            if current_a:
+                opts_b = [t for t in all_teams if t != current_a]
+            else:
+                opts_b = all_teams[:]
+                
+            renderer.team_b_dropdown.options = opts_b
+            renderer.team_b_dropdown.scroll_offset = 0
+            # Restore selection for B
+            if current_b in opts_b:
+                renderer.team_b_dropdown.selected_index = opts_b.index(current_b)
+            else:
+                renderer.team_b_dropdown.selected_index = -1
+
+        # 4. Handle events
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 running = False
             
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_ESCAPE:
-                    running = False
-                elif event.key == pygame.K_SPACE:
-                    paused = not paused
-                    print(f"{'[PAUSED]' if paused else '[PLAYING]'}")
-                elif event.key == pygame.K_LEFT:
-                    # Seek backward 5 seconds
-                    new_time = max(0, game_engine.current_timestamp - 5.0)
-                    game_engine.seek_to_time(new_time)
-                    print(f"[<<] Seeked to {int(new_time)}s")
-                elif event.key == pygame.K_RIGHT:
-                    # Seek forward 5 seconds
-                    new_time = game_engine.current_timestamp + 5.0
-                    game_engine.seek_to_time(new_time)
-                    print(f"[>>] Seeked to {int(new_time)}s")
+                    if renderer.state == UIState.SIMULATION:
+                        # Go back to menu
+                        renderer.state = UIState.MENU
+                        game_engine = None
+                        stats_tracker = None
+                        paused = True
+                        print("\n[MENU] Returned to menu")
+                    else:
+                        running = False
+                
+                elif renderer.state == UIState.SIMULATION and game_engine:
+                    if event.key == pygame.K_SPACE:
+                        paused = not paused
+                        print(f"{'[PAUSED]' if paused else '[PLAYING]'}")
+                    
+                    elif event.key == pygame.K_LEFT:
+                        new_time = max(0, game_engine.current_timestamp - 5.0)
+                        game_engine.seek_to_time(new_time)
+                        print(f"[<<] Seeked to {int(new_time)}s")
+                    
+                    elif event.key == pygame.K_RIGHT:
+                        new_time = game_engine.current_timestamp + 5.0
+                        game_engine.seek_to_time(new_time)
+                        print(f"[>>] Seeked to {int(new_time)}s")
             
-            elif event.type == pygame.MOUSEBUTTONDOWN:
-                if event.button == 1:  # Left click
-                    player_id = renderer.handle_click(event.pos, game_engine.current_state)
+            # Handle events based on state
+            if renderer.state == UIState.MENU:
+                # Pass all events to menu renderer
+                should_start = renderer.handle_menu_event(event)
+                
+                # Handle start button click
+                if should_start:
+                    team_a = renderer.team_a_dropdown.selected
+                    team_b = renderer.team_b_dropdown.selected
+                    
+                    if team_a and team_b and team_a != team_b:
+                        # Find match ID
+                        match_id = None
+                        for match in current_matches:
+                            home = match['home_team']['home_team_name']
+                            away = match['away_team']['away_team_name']
+                            if ((home == team_a and away == team_b) or 
+                                (home == team_b and away == team_a)):
+                                match_id = match['match_id']
+                                break
+                        
+                        if match_id:
+                            print(f"\n[LOADING] Starting match {match_id}...")
+                            dataset = data_loader.load_match(match_id)
+                            
+                            if dataset:
+                                # Start simulation
+                                team_a_name = dataset.metadata.teams[0].name
+                                team_b_name = dataset.metadata.teams[1].name
+                                print(f"✓ Match: {team_a_name} vs {team_b_name}")
+                                
+                                player_info = get_player_info(dataset)
+                                stats_tracker = StatsTracker()
+                                stats_tracker.process_events(dataset.events, player_info)
+                                
+                                for pid in player_info:
+                                    player_info[pid]['stats'] = stats_tracker.get_player_stats(pid)
+                                
+                                game_engine = GameEngine(dataset)
+                                renderer.init_simulation(team_a_name, team_b_name, player_info)
+                                paused = True
+                                print("✓ Simulation ready!")
+                            else:
+                                print("✗ Failed to load match")
+                        else:
+                            print(f"[!] Match not found between {team_a} and {team_b} in this season")
+                    else:
+                        print("[!] Please select valid teams")
+            
+            elif renderer.state == UIState.SIMULATION and game_engine:
+                 # Handle UI controls (Play/Pause, Speed, Seek)
+                 control_action = renderer.handle_control_event(event, game_engine)
+                 
+                 if control_action == "toggle_pause":
+                     paused = not paused
+                     print(f"{'[PAUSED]' if paused else '[PLAYING]'}")
+                 
+                 # Handle player selection (only if not interacting with controls)
+                 if not control_action and event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                    # Handle player selection
+                    player_id = renderer.handle_simulation_click(event.pos, game_engine.current_state)
                     if player_id:
-                        player_name = player_info.get(player_id, {}).get('name', 'Unknown')
+                        player_name = renderer.player_info.get(player_id, {}).get('name', 'Unknown')
                         print(f"\n[SELECTED] {player_name}")
-                        # Print stats to console
-                        stats_tracker.print_player_stats(player_id)
         
-        # Update game state
-        if not paused:
+        # Update simulation
+        if renderer.state == UIState.SIMULATION and game_engine and not paused:
             game_engine.update(dt)
             
-            # Check if match is finished
             if game_engine.is_finished():
                 print("\n[FINISHED] Match complete!")
                 paused = True
         
         # Render
-        renderer.render(game_engine.current_state)
+        if renderer.state == UIState.MENU:
+            renderer.render()
+        elif renderer.state == UIState.SIMULATION and game_engine:
+            renderer.render(game_engine.current_state)
+        
         pygame.display.flip()
     
     # Cleanup
     pygame.quit()
-    print("\nThanks for using OffSide!")
+    print("\nThank you for using Football Match Simulator!")
     sys.exit(0)
 
 
 if __name__ == "__main__":
     main()
-    game = GameEngine()
-    game.run()

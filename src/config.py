@@ -5,119 +5,94 @@ Contains all constants, settings, and file paths.
 
 import os
 
+# ============================================================================
+# PROJECT PATHS
+# ============================================================================
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA_DIR = os.path.join(BASE_DIR, 'data', 'matches')
 ASSETS_DIR = os.path.join(BASE_DIR, 'assets')
 
+# ============================================================================
 # SCREEN SETTINGS
-SCREEN_WIDTH = 1600  
-SCREEN_HEIGHT = 900    
-FPS = 60               
+# ============================================================================
+SCREEN_WIDTH = 1280      # Total window width
+SCREEN_HEIGHT = 720      # Total window height
+FPS = 60                 # Frames per second
 
-# Stats panel 
-PITCH_WIDTH_PX = 1200    # Pygame pitch area width
-PITCH_HEIGHT_PX = 800    # Pygame pitch area height
-STATS_PANEL_WIDTH = 400  # Right sidebar width
+# Layout
+SIDEBAR_WIDTH = 300      # Left sidebar for menu
+STATS_PANEL_WIDTH = 350  # Right sidebar for stats
+PITCH_WIDTH_PX = SCREEN_WIDTH - SIDEBAR_WIDTH - STATS_PANEL_WIDTH  
+PITCH_HEIGHT_PX = 600    # Pitch area height
 
+PANEL_WIDTH = STATS_PANEL_WIDTH  # Alias for compatibility
+
+# ============================================================================
 # PITCH DIMENSIONS (StatsBomb coordinate system)
-PITCH_LENGTH = 120       
-PITCH_WIDTH = 80        
+# ============================================================================
+PITCH_LENGTH = 120       # Length in StatsBomb units
+PITCH_WIDTH_STAT = 80    # Width in StatsBomb units (renamed from PITCH_WIDTH)
 
+# ============================================================================
+# COLORS (R, G, B)
+# ============================================================================
 PITCH_GREEN = (34, 139, 34)
 PITCH_DARK_GREEN = (20, 100, 20)
 LINE_WHITE = (255, 255, 255)
-BACKGROUND_DARK = (20, 20, 30)
+BACKGROUND_DARK = (18, 18, 20)
 PANEL_BG = (40, 40, 50)
+SIDEBAR_BG = (30, 30, 40)
 
 # Team colors
-TEAM_A_COLOR = (255, 0, 0)      
-TEAM_B_COLOR = (0, 0, 255)   
-BALL_COLOR = (255, 255, 255)    
+TEAM_A_COLOR = (255, 50, 50)    # Red
+TEAM_B_COLOR = (50, 100, 255)   # Blue
+BALL_COLOR = (255, 255, 255)    # White
 
 # UI Colors
 TEXT_WHITE = (255, 255, 255)
 TEXT_GRAY = (180, 180, 180)
+TEXT_DARK_GRAY = (120, 120, 120)
 HIGHLIGHT_YELLOW = (255, 255, 0)
-SELECTED_RING = (255, 215, 0)  
+SELECTED_RING = (255, 215, 0)
+BUTTON_BG = (60, 60, 70)
+BUTTON_HOVER = (80, 80, 90)
+DROPDOWN_BG = (50, 50, 60)
 
+# ============================================================================
 # GAME OBJECTS
-PLAYER_RADIUS = 12       # Player circle radius in pixels
-BALL_RADIUS = 6          # Ball circle radius in pixels
-PLAYER_NUMBER_SIZE = 16  # Font size for player numbers
+# ============================================================================
+PLAYER_RADIUS = 10
+BALL_RADIUS = 5
+PLAYER_NUMBER_SIZE = 14
 
+# ============================================================================
 # ANIMATION SETTINGS
-ANIMATION_SPEED = 1.0    # Multiplier for animation speed (1.0 = real-time)
-INTERPOLATION_STEPS = 30 # Frames to interpolate
+# ============================================================================
+ANIMATION_SPEED = 1.0
+INTERPOLATION_STEPS = 30
 
+# ============================================================================
+# STATSBOMB DATA SETTINGS
+# ============================================================================
 STATSBOMB_REPO = "https://raw.githubusercontent.com/statsbomb/open-data/master/data/"
 
-# Default match to load (La Liga: Barcelona vs Real Madrid)
-DEFAULT_COMPETITION_ID = 11  # La Liga
-DEFAULT_SEASON_ID = 90        # 2020/2021
-DEFAULT_MATCH_ID = 3788741    # Example match
+# Competition mappings
+COMPETITIONS = {
+    "FIFA World Cup": {"id": 43, "seasons": {
+        "2022": 106,
+        "2018": 3
+    }},
+    "La Liga": {"id": 11, "seasons": {
+        "2020/2021": 90,
+        "2019/2020": 42
+    }},
+    "Premier League": {"id": 2, "seasons": {
+        "2003/2004": 44
+    }}
+}
 
-# STATS TRACKING
-STATS_UPDATE_INTERVAL = 1.0 
-import os
+DEFAULT_COMPETITION_ID = 43
+DEFAULT_SEASON_ID = 106
+DEFAULT_MATCH_ID = 3869685  # World Cup 2022 Final
 
-# Screen Dimensions
-SCREEN_WIDTH = 1200
-SCREEN_HEIGHT = 800
-PANEL_WIDTH = 300
-PITCH_WIDTH = SCREEN_WIDTH - PANEL_WIDTH
-FPS = 60
-
-# Colors
-COLOR_WHITE = (255, 255, 255)
-COLOR_BLACK = (0, 0, 0)
-COLOR_GREEN = (34, 139, 34)  # Pitch Green
-COLOR_RED = (255, 0, 0)
-COLOR_BLUE = (0, 0, 255)
-COLOR_YELLOW = (255, 255, 0)
-COLOR_PANEL_BG = (50, 50, 50)
-COLOR_TEXT_HEADER = (255, 255, 255)
-COLOR_TEXT_BODY = (200, 200, 200)
-
-# Team Colors
-COLOR_TEAM_HOME = (0, 100, 255)  # Blue
-COLOR_TEAM_AWAY = (255, 50, 50)  # Red
-
-# Rendering Constants
-PITCH_LENGTH = 120.0  # StatsBomb pitch length
-PITCH_WIDTH_STAT = 80.0  # StatsBomb pitch width  
-PITCH_WIDTH_PX = SCREEN_WIDTH - PANEL_WIDTH  # Pitch area width in pixels
-PITCH_HEIGHT_PX = SCREEN_HEIGHT - 100  # Pitch area height in pixels (leave room for scoreboard)
-
-# Colors for new renderer
-PITCH_GREEN = (34, 139, 34)
-LINE_WHITE = (255, 255, 255)
-BACKGROUND_DARK = (20, 20, 25)
-PANEL_BG = (40, 40, 45)
-TEXT_WHITE = (255, 255, 255)
-TEXT_GRAY = (180, 180, 180)
-TEAM_A_COLOR = (0, 100, 255)  # Blue
-TEAM_B_COLOR = (255, 50, 50)  # Red
-SELECTED_RING = (255, 255, 0)
-HIGHLIGHT_YELLOW = (255, 215, 0)
-BALL_COLOR = (255, 255, 255)
-
-# Player/Ball sizes
-PLAYER_RADIUS = 12
-BALL_RADIUS = 6
-
-# Paths
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DATA_DIR = os.path.join(BASE_DIR, 'data')
-MATCHES_DIR = os.path.join(DATA_DIR, 'matches')
-ASSETS_DIR = os.path.join(BASE_DIR, 'assets')
-FONTS_DIR = os.path.join(ASSETS_DIR, 'fonts')
-
-# Data Configuration
-SAMPLE_MATCH_ID = "match"  # Filename without extension
-SAMPLE_MATCH_PATH = os.path.join(MATCHES_DIR, f"{SAMPLE_MATCH_ID}.json")
-
-# StatsBomb API / Repo
-STATSBOMB_REPO = "https://raw.githubusercontent.com/statsbomb/open-data/master/data/"
-DEFAULT_COMPETITION_ID = 43 # World Cup
-DEFAULT_SEASON_ID = 3 # 2018
-DEFAULT_MATCH_ID = 8658 # Belgium vs Japan
+STATS_UPDATE_INTERVAL = 1.0

@@ -112,6 +112,11 @@ class GameEngine:
         
         self.teams = dataset.metadata.teams
         
+        # OPTIMIZATION: Cache player metadata FIRST
+        # This is required for _get_default_position which is called by _initialize_game_state
+        self.player_metadata_cache = {}
+        self._cache_player_data()
+        
         # Current playback state
         self.current_event_index = 0
         self.current_timestamp = 0.0
@@ -125,13 +130,195 @@ class GameEngine:
         self.current_state = self._initialize_game_state()
         self.previous_state = None  # For interpolation
         
+        # Period offsets for continuous time
+        self.period_offsets = {
+            1: 0.0,
+            2: 45.0 * 60.0,
+            3: 90.0 * 60.0,
+            4: 105.0 * 60.0,
+            5: 120.0 * 60.0
+        }
+        
         # Player tracking
         self.player_positions = self._build_position_timeline()
+        self.ball_positions = self._build_ball_timeline()
+        
+        # Team IDs for logic
+        self.home_team_id = self.teams[0].team_id
+        self.away_team_id = self.teams[1].team_id
         
         print(f"[+] Game Engine initialized")
         print(f"  * {len(self.events)} events to process")
         print(f"  * {len(self.player_positions)} players tracked")
+        print(f"  * Cached metadata for {len(self.player_metadata_cache)} players")
         
+    def _cache_player_data(self):
+        """Builds a fast lookup cache for player team and default positions."""
+        # Detect collisions: (x, y) -> count of players there
+        occupied_positions = {}
+
+        for team in self.teams:
+            for player in team.players:
+                # Resolve position name once
+                pos_name = "Unknown"
+                if player.position:
+                     pos_name = player.position.name
+                     
+                is_home = (team.team_id == self.teams[0].team_id)
+                base_x, base_y = self._calculate_base_coordinates(pos_name, is_home)
+                
+                # FIX: Check for collisions and spread out
+                pos_key = (round(base_x, 1), round(base_y, 1))
+                if pos_key in occupied_positions:
+                    count = occupied_positions[pos_key]
+                    # Spread vertically: +5, -5, +10, -10...
+                    offset_y = 5.0 * ((count + 1) // 2)
+                    if count % 2 == 0:
+                        offset_y = -offset_y
+                    
+                    base_y += offset_y
+                    occupied_positions[pos_key] += 1
+                else:
+                    occupied_positions[pos_key] = 1
+                
+                self.player_metadata_cache[player.player_id] = {
+                    'team_id': team.team_id,
+                    'is_home': is_home,
+                    'base_x': base_x,
+                    'base_y': base_y,
+                    'name': player.name # Useful for UI too
+                }
+
+    def _calculate_base_coordinates(self, position_name: str, is_home_team: bool) -> Tuple[float, float]:
+        """Pure logic to get base coordinates from position name."""
+        base_pos = (60.0, 40.0) # Midfield
+        
+        if "Goalkeeper" in position_name:
+            base_pos = (5.0, 40.0)
+        elif "Defender" in position_name:
+            if "Left" in position_name: base_pos = (30.0, 10.0)
+            elif "Right" in position_name: base_pos = (30.0, 70.0)
+            elif "Center" in position_name: base_pos = (25.0, 40.0)
+            else: base_pos = (25.0, 40.0)
+        elif "Midfield" in position_name:
+            if "Defensive" in position_name: base_pos = (45.0, 40.0)
+            elif "Attacking" in position_name: base_pos = (75.0, 40.0)
+            elif "Left" in position_name: base_pos = (60.0, 20.0)
+            elif "Right" in position_name: base_pos = (60.0, 60.0)
+            else: base_pos = (60.0, 40.0)
+        elif "Wing" in position_name:
+             if "Left" in position_name: base_pos = (90.0, 10.0)
+             elif "Right" in position_name: base_pos = (90.0, 70.0)
+        elif "Forward" in position_name or "Striker" in position_name:
+            base_pos = (100.0, 40.0)
+            
+        if not is_home_team:
+            base_pos = (120.0 - base_pos[0], 80.0 - base_pos[1])
+            
+        return base_pos
+
+    def _get_default_position(self, player_id: str, team_id: str = None) -> Tuple[float, float]:
+        """
+        Get default tactical position.
+        OPTIMIZED: Uses cache (O(1)) instead of iteration (O(N)).
+        """
+        if player_id in self.player_metadata_cache:
+            data = self.player_metadata_cache[player_id]
+            return (data['base_x'], data['base_y'])
+            
+        # Fallback if player not in cache (shouldn't happen for valid players)
+        return (60.0, 40.0)
+
+    def _get_tactical_position(self, player_id: str, timestamp: float) -> Tuple[float, float]:
+        """
+        Calculate dynamic tactical position based on ball location.
+        """
+        # 1. Get Base Formation Position (Optimized)
+        if player_id in self.player_metadata_cache:
+            data = self.player_metadata_cache[player_id]
+            team_id = data['team_id']
+            base_x = data['base_x']
+            base_y = data['base_y']
+        else:
+            # Fallback (slow path)
+            team_id = self.home_team_id
+            for team in self.teams:
+                for p in team.players:
+                    if p.player_id == player_id:
+                        team_id = team.team_id
+                        break
+            base_x, base_y = self._get_default_position(player_id, team_id)
+        
+        # 2. Get Ball Position
+        bx, by, bz = self._interpolate_ball_position(timestamp)
+        
+        # 3. Calculate Shift
+        # Home Team (Attacks > 120): Moves forward as Ball X increases
+        # Away Team (Attacks < 0): Moves 'forward' (lower X) as Ball X decreases
+        
+        is_home = (team_id == self.home_team_id)
+        
+        # Shift Factor (how much they follow the ball)
+        # 0.0 = Statue, 1.0 = Man mark ball
+        x_factor = 0.6
+        
+        if is_home:
+            # Shift relative to center (60)
+            # Ball at 100 -> shift +24 (40 * 0.6)
+            # Ball at 20 -> shift -24
+            offset_x = (bx - 60.0) * x_factor
+            
+            # Goalkeepers shift less
+            if base_x < 15: 
+                offset_x *= 0.2
+                
+        else:
+            # Away Team
+            # Ball at 100 (Deep in def) -> Team should be high X (Back)
+            # Ball at 20 (Attacking) -> Team at low X (Forward)
+            # Base (flipped) is already high X.
+            
+            # If Ball is at 100 (Home Atk/Away Def): Away should be compressed back (High X).
+            # If Ball is at 20 (Home Def/Away Atk): Away should be pushed up (Low X).
+            
+            # At 100, (100-60)*0.6 = +24. Add to base (High X). Correct.
+            # At 20, (20-60)*0.6 = -24. Subtract from base (Low X). Correct.
+            
+            offset_x = (bx - 60.0) * x_factor
+            
+            if base_x > 105: # Goalkeeper
+                 offset_x *= 0.2
+
+        # 4. Y-Shift (Compress width slightly when defending)
+        offset_y = 0.0 # TODO: Implement later for width compression
+        
+        # 5. Add Noise (Breathing life)
+        import random
+        # Pseudo-random based on time + player_id to be smooth but random-looking
+        # or use simple sine waves
+        seed = hash(player_id) % 1000
+        noise_x = np.sin(timestamp * 1.5 + seed) * 1.5
+        noise_y = np.cos(timestamp * 1.2 + seed) * 1.5
+        
+        return (base_x + offset_x + noise_x, base_y + offset_y + noise_y)
+        
+    def _get_global_time(self, event: Event) -> float:
+        """Convert event period/timestamp to global match seconds."""
+        t = event.timestamp
+        if hasattr(t, 'total_seconds'):
+            t = t.total_seconds()
+            
+        period = 1
+        if hasattr(event, 'period'):
+             # Handle integer or object with id
+             if hasattr(event.period, 'id'):
+                 period = event.period.id
+             else:
+                 period = int(event.period)
+                 
+        offset = self.period_offsets.get(period, 0.0)
+        return offset + t
+
     def _initialize_game_state(self) -> GameState:
         """
         Create initial game state at kickoff.
@@ -150,19 +337,41 @@ class GameEngine:
                 # Default starting position (will be updated from events)
                 # Home team on left, away team on right
                 if team == self.teams[0]:  # Home team
-                    default_x = 40.0
+                    is_home = True
                 else:
-                    default_x = 80.0
+                    is_home = False
                 
-                default_y = 40.0  # Center of pitch
+                default_x, default_y = self._get_default_position(player.player_id, team.team_id)
                 
-                players[player.player_id] = PlayerState(
-                    player_id=player.player_id,
-                    x=default_x,
-                    y=default_y,
-                    has_ball=False,
-                    is_active=True
-                )
+                
+                # default_y is now set by _get_default_position
+                
+                # FIX: Only add starters to the active state
+                # Bench players will be added dynamically when they first appear in an event
+                is_starter = False
+                if player.player_id in self.player_metadata_cache:
+                    # We can infer starter status if they have a position that isn't substiute
+                    # checking player.position directly better
+                    if player.position and str(player.position) != "Substitute":
+                         is_starter = True
+                
+                # Also fallbacks
+                if hasattr(player, 'starting_position') and player.starting_position:
+                    if str(player.starting_position) != "Substitute":
+                        is_starter = True
+                elif hasattr(player, 'position') and player.position:
+                     if str(player.position) != "Substitute":
+                        is_starter = True
+                        
+                if is_starter:
+                    default_x, default_y = self._get_default_position(player.player_id, team.team_id)
+                    players[player.player_id] = PlayerState(
+                        player_id=player.player_id,
+                        x=default_x,
+                        y=default_y,
+                        has_ball=False,
+                        is_active=True
+                    )
         
         # Initial ball position (center)
         ball = BallState(x=60.0, y=40.0, z=0.0, in_play=True)
@@ -197,24 +406,23 @@ class GameEngine:
                         position_timeline[player.player_id] = []
         
         for event in self.events:
-            # Convert event timestamp to seconds
-            event_time = event.timestamp
-            if hasattr(event_time, 'total_seconds'):
-                event_time = event_time.total_seconds()
+            # Convert event timestamp to seconds with period offset
+            event_time = self._get_global_time(event)
             
             # Get freeze frame data if available
             if hasattr(event, 'freeze_frame') and event.freeze_frame:
                 try:
-                    for freeze_player in event.freeze_frame:
-                        player_id = freeze_player.player.player_id
-                        
-                        if player_id in position_timeline:
-                            # Add position snapshot
-                            position_timeline[player_id].append((
-                                event_time,
-                                freeze_player.coordinates.x,
-                                freeze_player.coordinates.y
-                            ))
+                    if hasattr(event.freeze_frame, 'players_coordinates'):
+                         for player, point in event.freeze_frame.players_coordinates.items():
+                            player_id = player.player_id
+                            
+                            if player_id in position_timeline:
+                                # Add position snapshot
+                                position_timeline[player_id].append((
+                                    event_time,
+                                    point.x,
+                                    point.y
+                                ))
                 except Exception:
                     pass  # Skip if freeze frame structure is unexpected
             
@@ -229,6 +437,81 @@ class GameEngine:
                     ))
         
         return position_timeline
+    
+    def _build_ball_timeline(self) -> List[Tuple[float, float, float, float]]:
+        """
+        Build a chronologically ordered timeline of ball positions.
+        Returns list of (timestamp, x, y, z).
+        """
+        timeline = []
+        
+        # Add initial center spot
+        if self.events:
+            start_time = self.events[0].timestamp
+            if hasattr(start_time, 'total_seconds'):
+                start_time = start_time.total_seconds()
+            timeline.append((max(0.0, start_time - 1.0), 60.0, 40.0, 0.0))
+            
+        for event in self.events:
+            if event.coordinates:
+                t = self._get_global_time(event)
+                
+                # Some events have 'end_coordinates' (passes, shots)
+                # We add the start point at event time
+                timeline.append((t, event.coordinates.x, event.coordinates.y, 0.0))
+                
+                # If there's an end coordinate and duration, add the end point
+                if hasattr(event, 'end_coordinates') and event.end_coordinates:
+                    # Estimate duration or valid end time? 
+                    # Usually next event time is better, but if it has end_coordinates it implies movement *during* event
+                    # For now, let's just stick to point-to-point between events for simplicity
+                    # or better: if pass, add end point at t + duration?
+                    # Kloppy events might have duration
+                    pass
+
+        # Sort just in case
+        timeline.sort(key=lambda x: x[0])
+        return timeline
+
+    def _interpolate_ball_position(self, timestamp: float) -> Tuple[float, float, float]:
+        """Interpolate ball position at timestamp."""
+        if not self.ball_positions:
+            return (60.0, 40.0, 0.0)
+            
+        # Find surrounding positions
+        # Optimization: indices could be cached/tracked if performance is issue
+        before = None
+        after = None
+        
+        # Binary search or just iterate (optimize later if needed)
+        # Using simple iteration for robustness first
+        for data in self.ball_positions:
+            t, x, y, z = data
+            if t <= timestamp:
+                before = data
+            if t >= timestamp:
+                after = data
+                break
+                
+        if before is None:
+            return (self.ball_positions[0][1], self.ball_positions[0][2], self.ball_positions[0][3])
+        if after is None:
+            return (self.ball_positions[-1][1], self.ball_positions[-1][2], self.ball_positions[-1][3])
+            
+        t1, x1, y1, z1 = before
+        t2, x2, y2, z2 = after
+        
+        if t2 == t1:
+            return (x1, y1, z1)
+            
+        factor = (timestamp - t1) / (t2 - t1)
+        
+        # Linear interpolation
+        x = x1 + (x2 - x1) * factor
+        y = y1 + (y2 - y1) * factor
+        z = z1 + (z2 - z1) * factor # Simple linear height for now
+        
+        return (x, y, z)
     
     def _interpolate_position(self, player_id: str, timestamp: float) -> Tuple[float, float]:
         """
@@ -246,8 +529,17 @@ class GameEngine:
         positions = self.player_positions.get(player_id, [])
         
         if not positions:
-            # No position data, return default
-            return (60.0, 40.0)
+            # No position data, drift relative to ball or formation?
+            # For now, return default tactical position
+            # We need to find team_id for this player to be accurate
+            # Ideally cache player_team map
+            team_id = self.teams[0].team_id # Fallback
+            for team in self.teams:
+                for p in team.players:
+                    if p.player_id == player_id:
+                        team_id = team.team_id
+                        break
+            return self._get_default_position(player_id, team_id)
         
         # Find surrounding positions
         before = None
@@ -260,21 +552,73 @@ class GameEngine:
                 after = (t, x, y)
                 break
         
-        # If no surrounding positions, use closest
+        # If no surrounding positions, return tactical
+        if before is None and after is None:
+            return self._get_tactical_position(player_id, timestamp)
+            
         if before is None:
-            return (positions[0][1], positions[0][2])
+             # Only future data? Interpolate from tactical to future?
+             # For now just use future
+             return (positions[0][1], positions[0][2])
+             
         if after is None:
-            return (positions[-1][1], positions[-1][2])
+             # Only past data?
+             # Interpolate from past to tactical
+             t_before, x_before, y_before = before
+             
+             # If it's been > 5 seconds, blend to tactical
+             time_diff = timestamp - t_before
+             if time_diff > 5.0:
+                 tactical_x, tactical_y = self._get_tactical_position(player_id, timestamp)
+                 # Blend factor (0.0 at 5s, 1.0 at 10s)
+                 blend = min(1.0, (time_diff - 5.0) / 5.0)
+                 x = x_before + (tactical_x - x_before) * blend
+                 y = y_before + (tactical_y - y_before) * blend
+                 return (x, y)
+             else:
+                 return (x_before, y_before)
         
-        # Linear interpolation
+        # Linear interpolation between known points
         t_before, x_before, y_before = before
         t_after, x_after, y_after = after
+        
+        # Check gap size
+        gap = t_after - t_before
+        if gap > 10.0:
+            # Sparse data gap! Use tactical formation bridge
+            # Start at actual data, drift to tactical, then drift back to actual data
+            
+            # Simple approach: Check were we are in the gap
+            progress = (timestamp - t_before) / gap
+            tactical_x, tactical_y = self._get_tactical_position(player_id, timestamp)
+            
+            # Weight: 0 at ends, 1 in middle?
+            # Or blend: valid -> tactical -> valid
+            if progress < 0.2:
+                # Departing from valid (0.0 to 0.2) -> 0% to 100% tactical blend
+                blend = progress / 0.2
+                x = x_before + (tactical_x - x_before) * blend
+                y = y_before + (tactical_y - y_before) * blend
+            elif progress > 0.8:
+                # Arriving at valid (0.8 to 1.0) -> 100% to 0% tactical blend (pure valid)
+                blend = (1.0 - progress) / 0.2
+                x = x_after + (tactical_x - x_after) * blend
+                y = y_after + (tactical_y - y_after) * blend
+            else:
+                 # Middle of gap: Pure tactical
+                 x, y = tactical_x, tactical_y
+                 
+            return (x, y)
         
         if t_after == t_before:
             return (x_before, y_before)
         
         # Interpolation factor (0.0 to 1.0)
         factor = (timestamp - t_before) / (t_after - t_before)
+        
+        # FIX: Use smooth interpolation instead of linear
+        # This prevents robotic sliding
+        factor = smooth_interpolation(0, 1, factor)
         
         x = x_before + (x_after - x_before) * factor
         y = y_before + (y_after - y_before) * factor
@@ -301,9 +645,7 @@ class GameEngine:
             next_event = self.events[self.current_event_index]
             
             # Convert event timestamp to seconds if needed
-            event_time = next_event.timestamp
-            if hasattr(event_time, 'total_seconds'):
-                event_time = event_time.total_seconds()
+            event_time = self._get_global_time(next_event)
             
             if self.current_timestamp >= event_time:
                 # Process this event
@@ -316,10 +658,14 @@ class GameEngine:
             self.current_state.players[player_id].x = x
             self.current_state.players[player_id].y = y
         
-        # Update ball position (follows last event)
-        if self.current_state.last_event and self.current_state.last_event.coordinates:
-            self.current_state.ball.x = self.current_state.last_event.coordinates.x
-            self.current_state.ball.y = self.current_state.last_event.coordinates.y
+        # Update ball position (interpolate)
+        bx, by, bz = self._interpolate_ball_position(self.current_timestamp)
+        self.current_state.ball.x = bx
+        self.current_state.ball.y = by
+        self.current_state.ball.z = bz
+        
+        # Update state timestamp for smooth UI clock
+        self.current_state.timestamp = self.current_timestamp
         
         return self.current_state
     
@@ -333,9 +679,7 @@ class GameEngine:
         self.current_state.last_event = event
         
         # Convert timestamp to seconds
-        event_time = event.timestamp
-        if hasattr(event_time, 'total_seconds'):
-            event_time = event_time.total_seconds()
+        event_time = self._get_global_time(event)
         self.current_state.timestamp = event_time
         
         # Update period
@@ -362,6 +706,22 @@ class GameEngine:
             player_id = event.player.player_id
             if player_id in self.current_state.players:
                 self.current_state.players[player_id].has_ball = True
+            else:
+                # FIX: Dynamically add subbed-in players
+                # If a player appears in an event but isn't in state, add them now
+                # Need team_id
+                team_id = event.team.team_id if event.team else self.home_team_id
+                
+                # Get default pos (will be updated immediately by interpolation)
+                def_x, def_y = self._get_default_position(player_id, team_id)
+                
+                self.current_state.players[player_id] = PlayerState(
+                    player_id=player_id,
+                    x=def_x,
+                    y=def_y,
+                    has_ball=True,
+                    is_active=True
+                )
     
     def seek_to_time(self, timestamp: float):
         """
@@ -375,9 +735,7 @@ class GameEngine:
         # Find corresponding event index
         for i, event in enumerate(self.events):
             # Convert event timestamp to seconds if it's a timedelta
-            event_time = event.timestamp
-            if hasattr(event_time, 'total_seconds'):
-                event_time = event_time.total_seconds()
+            event_time = self._get_global_time(event)
             
             if event_time > timestamp:
                 self.current_event_index = i
@@ -388,6 +746,21 @@ class GameEngine:
         
         for event in self.events[:self.current_event_index]:
             self._process_event(event)
+
+        # FIX: Force position update for current timestamp
+        # Otherwise players will be at "kickoff" positions for one frame, causing a "cluster" glitch
+        for player_id in self.current_state.players:
+            x, y = self._interpolate_position(player_id, self.current_timestamp)
+            self.current_state.players[player_id].x = x
+            self.current_state.players[player_id].y = y
+        
+        # Update ball too
+        bx, by, bz = self._interpolate_ball_position(self.current_timestamp)
+        self.current_state.ball.x = bx
+        self.current_state.ball.y = by
+        self.current_state.ball.z = bz
+        
+        self.current_state.timestamp = self.current_timestamp
     
     def set_playback_speed(self, speed: float):
         """
