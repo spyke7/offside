@@ -126,8 +126,16 @@ class StatsBombDataLoader:
         )
         
         print(f"Loaded {len(dataset.events)} events")
-        print(f"Teams: {dataset.teams[0].name} vs {dataset.teams[1].name}")
-        print(f"Match duration: {dataset.events[-1].timestamp:.0f} seconds\n")
+        print(f"Teams: {dataset.metadata.teams[0].name} vs {dataset.metadata.teams[1].name}")
+        
+        # Convert timedelta to seconds for display
+        last_event_time = dataset.events[-1].timestamp
+        if hasattr(last_event_time, 'total_seconds'):
+            duration_seconds = last_event_time.total_seconds()
+        else:
+            duration_seconds = float(last_event_time)
+        
+        print(f"Match duration: {duration_seconds:.0f} seconds\n")
         
         return dataset
 
@@ -163,7 +171,7 @@ def get_player_info(dataset: Dataset) -> Dict[str, Dict]:
     """
     player_info = {}
     
-    for team in dataset.teams:
+    for team in dataset.metadata.teams:
         for player in team.players:
             player_info[player.player_id] = {
                 'name': player.name,
@@ -186,8 +194,8 @@ def get_team_info(dataset: Dataset) -> Tuple[Dict, Dict]:
     Returns:
         Tuple of (team_a_info, team_b_info) dictionaries
     """
-    team_a = dataset.teams[0]
-    team_b = dataset.teams[1]
+    team_a = dataset.metadata.teams[0]
+    team_b = dataset.metadata.teams[1]
     
     team_a_info = {
         'id': team_a.team_id,
@@ -242,4 +250,4 @@ if __name__ == "__main__":
     team_a, team_b = get_team_info(dataset)
     print(f"\n{team_a['name']}: {len(team_a['players'])} players")
     print(f"{team_b['name']}: {len(team_b['players'])} players")
-    return json.load(f)
+

@@ -53,13 +53,13 @@ def main():
     try:
         dataset = loader.load_match_data(match_id)
     except Exception as e:
-        print(f"\n✗ Error loading match data: {e}")
+        print(f"\n[-] Error loading match data: {e}")
         print("Please check your internet connection and match ID.")
         pygame.quit()
         sys.exit(1)
     
-    team_a = dataset.teams[0]
-    team_b = dataset.teams[1]
+    team_a = dataset.metadata.teams[0]
+    team_b = dataset.metadata.teams[1]
     
     font = pygame.font.Font(None, 36)
     small_font = pygame.font.Font(None, 24)
