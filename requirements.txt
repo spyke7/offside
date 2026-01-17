@@ -1,0 +1,12 @@
+kloppy==3.18.0
+mplsoccer==1.6.1
+pandas==2.3.3
+numpy==2.3.5
+
+pygame==2.6.1
+matplotlib==3.10.7
+
+aiohttp==3.13.3
+requests==2.32.5
+
+python-dateutil==2.9.0.post0
