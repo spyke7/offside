@@ -6,10 +6,10 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 try:
     from src.stats_tracker import StatsTracker
-    from src.data_loader import DataLoader
+    from src.data_loader import StatsBombDataLoader
     
     # Load data
-    loader = DataLoader()
+    loader = StatsBombDataLoader()
     dataset = loader.load_data()
     
     # Init tracker

@@ -47,7 +47,7 @@ class Renderer:
         radius = int(9.15 * self.scale_x) # 9.15m radius approx 10 yards
         pygame.draw.circle(self.screen, COLOR_WHITE, center, radius, 2)
 
-    def draw_event(self, event):
+    def draw_event(self, event, team_colors=None):
         """Draws a visualization of a single event and tracks interactive elements."""
         self.interactive_elements = [] # clear previous
         
@@ -56,8 +56,14 @@ class Renderer:
             x, y = event.coordinates.x, event.coordinates.y
             screen_x, screen_y = self.to_screen_coords(x, y)
             
+            # Determine team color
+            player_color = COLOR_RED  # Default
+            if hasattr(event, 'team') and event.team and team_colors:
+                team_key = str(event.team)
+                player_color = team_colors.get(team_key, COLOR_RED)
+            
             # Draw event location
-            pygame.draw.circle(self.screen, COLOR_RED, (screen_x, screen_y), 10)
+            pygame.draw.circle(self.screen, player_color, (screen_x, screen_y), 10)
             
             # Track player associated with this event
             if hasattr(event, 'player') and event.player:

@@ -1,7 +1,7 @@
 import pygame
 import sys
 from src.config import *
-from src.data_loader import DataLoader
+from src.data_loader import StatsBombDataLoader
 from src.renderer import Renderer
 from src.stats_tracker import StatsTracker
 
@@ -14,7 +14,8 @@ class GameEngine:
         self.running = True
 
         self.renderer = Renderer(self.screen, SCREEN_WIDTH, SCREEN_HEIGHT)
-        self.data_loader = DataLoader()
+        self.data_loader = StatsBombDataLoader()
+
         self.stats_tracker = StatsTracker()
         self.events = None
         self.current_event_idx = 0
@@ -33,12 +34,27 @@ class GameEngine:
             self.events = self.dataset.events
             print(f"Loaded {len(self.events)} events.")
             
+            # Extract team info for color mapping
+            if hasattr(self.dataset, 'metadata') and hasattr(self.dataset.metadata, 'teams'):
+                teams = self.dataset.metadata.teams
+                if len(teams) >= 2:
+                    self.team_colors = {
+                        str(teams[0]): COLOR_TEAM_HOME,
+                        str(teams[1]): COLOR_TEAM_AWAY
+                    }
+                    print(f"Team colors: {teams[0].name} (Blue) vs {teams[1].name} (Red)")
+                else:
+                    self.team_colors = {}
+            else:
+                self.team_colors = {}
+            
             # Pre-process stats
             self.stats_tracker.process_events(self.events)
             
         except Exception as e:
             print(f"Failed to load content: {e}")
             self.events = []
+            self.team_colors = {}
 
     def handle_input(self):
         for event in pygame.event.get():
@@ -81,7 +97,7 @@ class GameEngine:
         
         if self.events and self.current_event_idx < len(self.events):
             event = self.events[self.current_event_idx]
-            self.renderer.draw_event(event)
+            self.renderer.draw_event(event, self.team_colors)
 
         self.renderer.draw_panel(self.selected_player_stats, self.selected_player_name)
         
