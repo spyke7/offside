@@ -34,29 +34,50 @@ PITCH_LENGTH = 120       # Length in StatsBomb units
 PITCH_WIDTH_STAT = 80    # Width in StatsBomb units (renamed from PITCH_WIDTH)
 
 # ============================================================================
-# COLORS (R, G, B)
+# COLORS (R, G, B) - Modern Premium Palette
 # ============================================================================
-PITCH_GREEN = (34, 139, 34)
-PITCH_DARK_GREEN = (20, 100, 20)
+# Pitch colors
+PITCH_GREEN = (30, 120, 50)
+PITCH_DARK_GREEN = (20, 90, 35)
+PITCH_LIGHT_GREEN = (45, 140, 65)
 LINE_WHITE = (255, 255, 255)
-BACKGROUND_DARK = (18, 18, 20)
-PANEL_BG = (40, 40, 50)
-SIDEBAR_BG = (30, 30, 40)
 
-# Team colors
-TEAM_A_COLOR = (255, 50, 50)    # Red
-TEAM_B_COLOR = (50, 100, 255)   # Blue
-BALL_COLOR = (255, 255, 255)    # White
+# Background gradients (top, bottom)
+BACKGROUND_DARK = (15, 15, 25)
+BACKGROUND_GRADIENT_TOP = (25, 25, 45)
+BACKGROUND_GRADIENT_BOTTOM = (10, 10, 20)
+
+# Panel colors
+PANEL_BG = (35, 38, 52)
+PANEL_BG_LIGHT = (45, 48, 62)
+SIDEBAR_BG = (25, 28, 40)
+
+# Team colors (vibrant)
+TEAM_A_COLOR = (255, 75, 85)      # Coral Red
+TEAM_B_COLOR = (65, 135, 255)     # Electric Blue
+BALL_COLOR = (255, 255, 255)
 
 # UI Colors
 TEXT_WHITE = (255, 255, 255)
-TEXT_GRAY = (180, 180, 180)
-TEXT_DARK_GRAY = (120, 120, 120)
-HIGHLIGHT_YELLOW = (255, 255, 0)
-SELECTED_RING = (255, 215, 0)
-BUTTON_BG = (60, 60, 70)
-BUTTON_HOVER = (80, 80, 90)
-DROPDOWN_BG = (50, 50, 60)
+TEXT_GRAY = (170, 175, 185)
+TEXT_DARK_GRAY = (100, 105, 115)
+HIGHLIGHT_YELLOW = (255, 215, 0)
+HIGHLIGHT_CYAN = (0, 220, 255)
+SELECTED_RING = (255, 200, 50)
+
+# Button colors
+BUTTON_BG = (55, 60, 80)
+BUTTON_HOVER = (75, 80, 110)
+BUTTON_ACTIVE = (90, 95, 130)
+BUTTON_SUCCESS = (45, 160, 90)
+BUTTON_SUCCESS_HOVER = (55, 180, 105)
+BUTTON_PRIMARY = (60, 120, 220)
+BUTTON_PRIMARY_HOVER = (80, 140, 240)
+
+# Dropdown colors
+DROPDOWN_BG = (40, 45, 60)
+DROPDOWN_HOVER = (55, 60, 80)
+DROPDOWN_BORDER = (70, 75, 95)
 
 # ============================================================================
 # GAME OBJECTS
@@ -96,3 +117,25 @@ DEFAULT_SEASON_ID = 106
 DEFAULT_MATCH_ID = 3869685  # World Cup 2022 Final
 
 STATS_UPDATE_INTERVAL = 1.0
+
+# ============================================================================
+# ML PREDICTION CONSTRAINTS
+# Only these options are valid for ML prediction mode
+# ============================================================================
+ML_SUPPORTED = {
+    "La Liga": {
+        "seasons": ["2021/2022", "2022/2023", "2023/2024"],
+        "teams": [
+            "Real Madrid", "Barcelona", "Atletico Madrid",
+            "Sevilla", "Real Betis", "Real Sociedad",
+            "Villarreal", "Athletic Bilbao", "Valencia",
+            "Osasuna", "Celta Vigo", "Rayo Vallecano",
+            "Getafe", "Espanyol", "Mallorca", "Cadiz",
+            "Girona", "Almeria", "Las Palmas", "Alaves"
+        ]
+    }
+}
+
+# Mode constants
+MODE_REPLAY = "replay"
+MODE_ML = "ml"

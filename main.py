@@ -12,6 +12,17 @@ from src.renderer import Renderer, UIState
 from src.stats_tracker import StatsTracker
 from src.config import *
 
+# ML Simulator (lazy loaded)
+ml_simulator = None
+
+def get_ml_simulator():
+    """Lazy load ML simulator to avoid startup delay."""
+    global ml_simulator
+    if ml_simulator is None:
+        from src.ml_simulator import get_ml_simulator as get_sim
+        ml_simulator = get_sim()
+    return ml_simulator
+
 
 def main():
     """Main application loop."""
@@ -44,7 +55,7 @@ def main():
     
     running = True
     
-    print("\n✓ Application started")
+    print("\n[OK] Application started")
     print("Navigate using the menu to select a match\n")
     
     while running:
@@ -67,7 +78,7 @@ def main():
             # Populate seasons
             seasons = list(COMPETITIONS[selected_comp]['seasons'].keys())
             renderer.season_dropdown.options = sorted(seasons, reverse=True)
-            print(f"✓ Selected {selected_comp} (ID: {current_competition_id})")
+            print(f"[OK] Selected {selected_comp} (ID: {current_competition_id})")
 
         # 2. Check for season change (triggers match loading)
         selected_season = renderer.season_dropdown.selected
@@ -89,7 +100,7 @@ def main():
                 renderer.is_loading = False
                 
                 if current_matches:
-                    print(f"✓ Found {len(current_matches)} matches")
+                    print(f"[OK] Found {len(current_matches)} matches")
                     
                     # Populate teams list (master list)
                     teams = set()
@@ -162,9 +173,15 @@ def main():
                     if renderer.state == UIState.SIMULATION:
                         # Go back to menu
                         renderer.state = UIState.MENU
+                        renderer.ml_result = None  # Clear ML prediction
                         game_engine = None
                         stats_tracker = None
                         paused = True
+                        print("\n[MENU] Returned to menu")
+                    elif renderer.state == UIState.ML_SIMULATION:
+                        # Go back to menu from ML simulation
+                        renderer.state = UIState.MENU
+                        renderer.ml_result = None
                         print("\n[MENU] Returned to menu")
                     else:
                         running = False
@@ -187,10 +204,10 @@ def main():
             # Handle events based on state
             if renderer.state == UIState.MENU:
                 # Pass all events to menu renderer
-                should_start = renderer.handle_menu_event(event)
+                menu_action = renderer.handle_menu_event(event)
                 
                 # Handle start button click
-                if should_start:
+                if menu_action == 'start':
                     team_a = renderer.team_a_dropdown.selected
                     team_b = renderer.team_b_dropdown.selected
                     
@@ -213,7 +230,7 @@ def main():
                                 # Start simulation
                                 team_a_name = dataset.metadata.teams[0].name
                                 team_b_name = dataset.metadata.teams[1].name
-                                print(f"✓ Match: {team_a_name} vs {team_b_name}")
+                                print(f"[OK] Match: {team_a_name} vs {team_b_name}")
                                 
                                 player_info = get_player_info(dataset)
                                 stats_tracker = StatsTracker()
@@ -225,13 +242,70 @@ def main():
                                 game_engine = GameEngine(dataset)
                                 renderer.init_simulation(team_a_name, team_b_name, player_info)
                                 paused = True
-                                print("✓ Simulation ready!")
+                                print("[OK] Simulation ready!")
                             else:
                                 print("✗ Failed to load match")
                         else:
                             print(f"[!] Match not found between {team_a} and {team_b} in this season")
                     else:
                         print("[!] Please select valid teams")
+                
+                # Handle ML simulation button click - runs visual simulation with ML data
+                elif menu_action == 'ml':
+                    # Use ML-specific dropdowns (not replay dropdowns)
+                    team_a = renderer.ml_home_dropdown.selected
+                    team_b = renderer.ml_away_dropdown.selected
+                    
+                    if team_a and team_b and team_a != team_b:
+                        print(f"\n[ML] Running prediction: {team_a} vs {team_b}...")
+                        try:
+                            # Get ML prediction
+                            sim = get_ml_simulator()
+                            ml_result = sim.simulate_match(team_a, team_b)
+                            print(f"[ML] Prediction: {ml_result.home_goals}-{ml_result.away_goals}")
+                            print(f"     H:{ml_result.home_win_prob*100:.0f}% D:{ml_result.draw_prob*100:.0f}% A:{ml_result.away_win_prob*100:.0f}%")
+                            
+                            # Generate synthetic match for visual simulation
+                            from src.synthetic_match import get_synthetic_generator
+                            from src.synthetic_engine import SyntheticGameEngine
+                            
+                            generator = get_synthetic_generator()
+                            synthetic_dataset = generator.generate(ml_result)
+                            
+                            # Create synthetic game engine
+                            game_engine = SyntheticGameEngine(synthetic_dataset, ml_result)
+                            
+                            # Build player info for renderer
+                            player_info = {}
+                            for player in synthetic_dataset.home_team.players:
+                                player_info[player.player_id] = {
+                                    'name': player.name,
+                                    'jersey_number': player.jersey_number,
+                                    'position': player.position,
+                                    'team': synthetic_dataset.home_team.name,
+                                    'stats': {}
+                                }
+                            for player in synthetic_dataset.away_team.players:
+                                player_info[player.player_id] = {
+                                    'name': player.name,
+                                    'jersey_number': player.jersey_number,
+                                    'position': player.position,
+                                    'team': synthetic_dataset.away_team.name,
+                                    'stats': {}
+                                }
+                            
+                            # Initialize visual simulation
+                            renderer.init_simulation(team_a, team_b, player_info)
+                            renderer.ml_result = ml_result  # Show prediction in stats panel
+                            paused = False  # Start playing automatically
+                            
+                            print("[OK] ML Visual Simulation started!")
+                        except Exception as e:
+                            print(f"[ML] Error: {e}")
+                            import traceback
+                            traceback.print_exc()
+                    else:
+                        print("[!] Please select valid teams for ML prediction")
             
             elif renderer.state == UIState.SIMULATION and game_engine:
                  # Handle UI controls (Play/Pause, Speed, Seek)
@@ -248,6 +322,25 @@ def main():
                     if player_id:
                         player_name = renderer.player_info.get(player_id, {}).get('name', 'Unknown')
                         print(f"\n[SELECTED] {player_name}")
+            
+            elif renderer.state == UIState.ML_SIMULATION:
+                # Handle ML simulation events
+                ml_action = renderer.handle_ml_event(event)
+                
+                if ml_action == 'back':
+                    renderer.state = UIState.MENU
+                    renderer.ml_result = None
+                    print("\n[MENU] Returned to menu")
+                elif ml_action == 'resim':
+                    # Resimulate with same teams
+                    if renderer.ml_result:
+                        team_a = renderer.ml_result.home_team
+                        team_b = renderer.ml_result.away_team
+                        print(f"\n[ML] Re-simulating: {team_a} vs {team_b}...")
+                        sim = get_ml_simulator()
+                        result = sim.simulate_match(team_a, team_b)
+                        renderer.init_ml_simulation(result)
+                        print(f"[OK] New prediction: {result.home_goals} - {result.away_goals}")
         
         # Update simulation
         if renderer.state == UIState.SIMULATION and game_engine and not paused:
@@ -262,6 +355,8 @@ def main():
             renderer.render()
         elif renderer.state == UIState.SIMULATION and game_engine:
             renderer.render(game_engine.current_state)
+        elif renderer.state == UIState.ML_SIMULATION:
+            renderer.render()
         
         pygame.display.flip()
     

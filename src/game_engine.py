@@ -20,6 +20,16 @@ from enum import Enum
 
 from kloppy.domain import Dataset, Event, EventType, Team, Player
 
+# Import MatchState wrapper (lazy to avoid circular imports)
+_match_state_module = None
+
+def _get_match_state_class():
+    """Lazy import to avoid circular dependency."""
+    global _match_state_module
+    if _match_state_module is None:
+        from src import match_state as _match_state_module
+    return _match_state_module.MatchState, _match_state_module.MatchHistory
+
 
 # ============================================================================
 # DATA STRUCTURES
@@ -147,9 +157,15 @@ class GameEngine:
         self.home_team_id = self.teams[0].team_id
         self.away_team_id = self.teams[1].team_id
         
+        # MatchState wrapper for ML/replay features
+        self._match_state = None
+        self._match_history = None
+        self._init_match_state()
+        
         print(f"[+] Game Engine initialized")
         print(f"  * {len(self.events)} events to process")
         print(f"  * {len(self.player_positions)} players tracked")
+        print(f"  * MatchState wrapper initialized")
         print(f"  * Cached metadata for {len(self.player_metadata_cache)} players")
         
     def _cache_player_data(self):
@@ -188,6 +204,77 @@ class GameEngine:
                     'base_y': base_y,
                     'name': player.name # Useful for UI too
                 }
+
+    def _init_match_state(self):
+        """
+        Initialize the MatchState wrapper and history tracker.
+        
+        This enables:
+        - ML model predictions via to_vector()
+        - Replay via MatchHistory
+        - What-if simulations via copy()
+        """
+        try:
+            MatchState, MatchHistory = _get_match_state_class()
+            
+            # Build player -> team mapping
+            player_team_map = {
+                pid: data['team_id'] 
+                for pid, data in self.player_metadata_cache.items()
+            }
+            
+            # Create MatchState from current GameState
+            self._match_state = MatchState.from_game_state(
+                self.current_state,
+                home_team_id=self.home_team_id,
+                away_team_id=self.away_team_id,
+                player_team_map=player_team_map
+            )
+            
+            # Initialize history tracker (1 second intervals, max 10 mins of history)
+            self._match_history = MatchHistory(max_snapshots=600, interval_seconds=1.0)
+            
+        except Exception as e:
+            print(f"Warning: Could not initialize MatchState: {e}")
+            self._match_state = None
+            self._match_history = None
+    
+    def get_match_state(self):
+        """
+        Get the current MatchState wrapper.
+        
+        Use this for:
+        - ML predictions: match_state.to_vector()
+        - Serialization: match_state.to_dict()
+        - What-if: match_state.copy()
+        
+        Returns:
+            MatchState or None if not initialized
+        """
+        return self._match_state
+    
+    def set_match_state(self, match_state):
+        """
+        Inject a MatchState for what-if simulation.
+        
+        Args:
+            match_state: MatchState to use
+        """
+        self._match_state = match_state
+        # Also sync the GameState from it
+        if match_state is not None:
+            self.current_state = match_state.to_game_state()
+    
+    def get_match_history(self):
+        """
+        Get the match history tracker.
+        
+        Use for replay and time-series analysis.
+        
+        Returns:
+            MatchHistory or None
+        """
+        return self._match_history
 
     def _calculate_base_coordinates(self, position_name: str, is_home_team: bool) -> Tuple[float, float]:
         """Pure logic to get base coordinates from position name."""
@@ -667,6 +754,13 @@ class GameEngine:
         # Update state timestamp for smooth UI clock
         self.current_state.timestamp = self.current_timestamp
         
+        # Sync MatchState wrapper
+        if self._match_state is not None:
+            self._match_state.sync_from_game_state(self.current_state)
+            # Record to history (at 1 second intervals)
+            if self._match_history is not None:
+                self._match_history.record(self._match_state)
+        
         return self.current_state
     
     def _process_event(self, event: Event):
@@ -796,7 +890,10 @@ class GameEngine:
 
 def smooth_interpolation(start: float, end: float, progress: float) -> float:
     """
-    Smooth interpolation using ease-in-out curve.
+    Ultra-smooth interpolation using quintic ease-in-out curve.
+    
+    This provides even smoother movement than cubic easing,
+    with gentle acceleration and deceleration.
     
     Args:
         start: Starting value
@@ -806,10 +903,38 @@ def smooth_interpolation(start: float, end: float, progress: float) -> float:
     Returns:
         Interpolated value
     """
-    # Ease-in-out cubic
+    # Clamp progress to valid range
+    progress = max(0.0, min(1.0, progress))
+    
+    # Quintic ease-in-out (smoother than cubic)
     if progress < 0.5:
-        t = 4 * progress ** 3
+        # Ease in: 16 * t^5
+        t = 16 * (progress ** 5)
     else:
-        t = 1 - (-2 * progress + 2) ** 3 / 2
+        # Ease out: 1 - (-2t + 2)^5 / 2
+        t = 1 - ((-2 * progress + 2) ** 5) / 2
     
     return start + (end - start) * t
+
+
+def bezier_interpolation(p0: tuple, p1: tuple, p2: tuple, t: float) -> tuple:
+    """
+    Quadratic Bezier interpolation for smooth curved paths.
+    
+    Args:
+        p0: Start point (x, y)
+        p1: Control point (x, y)  
+        p2: End point (x, y)
+        t: Progress from 0.0 to 1.0
+        
+    Returns:
+        Interpolated (x, y) position on curve
+    """
+    t = max(0.0, min(1.0, t))
+    inv_t = 1 - t
+    
+    x = inv_t * inv_t * p0[0] + 2 * inv_t * t * p1[0] + t * t * p2[0]
+    y = inv_t * inv_t * p0[1] + 2 * inv_t * t * p1[1] + t * t * p2[1]
+    
+    return (x, y)
+

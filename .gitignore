@@ -1,5 +1,21 @@
 
+# Python cache and virtual environments
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+env/
 venv/
+ENV/
+# Build artifacts
+*.egg-info/
+build/
+dist/
+# Project data and generated assets
+data/
+archive/
+assets/
+*.zip
 env/
 src/__pycache__/
 __pycache__
